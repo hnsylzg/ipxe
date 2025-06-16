@@ -127,6 +127,8 @@ struct tls_header {
 
 /* TLS named curve extension */
 #define TLS_NAMED_CURVE 10
+#define TLS_NAMED_CURVE_SECP256R1 23
+#define TLS_NAMED_CURVE_SECP384R1 24
 #define TLS_NAMED_CURVE_X25519 29
 
 /* TLS signature algorithms extension */
@@ -218,12 +220,19 @@ struct tls_cipher_suite {
 /** TLS named curved type */
 #define TLS_NAMED_CURVE_TYPE 3
 
+/** TLS uncompressed curve point format */
+#define TLS_POINT_FORMAT_UNCOMPRESSED 4
+
 /** A TLS named curve */
 struct tls_named_curve {
 	/** Elliptic curve */
 	struct elliptic_curve *curve;
 	/** Numeric code (in network-endian order) */
 	uint16_t code;
+	/** Curve point format byte (if any) */
+	uint8_t format;
+	/** Pre-master secret length */
+	uint8_t pre_master_secret_len;
 };
 
 /** TLS named curve table */
@@ -455,6 +464,17 @@ struct tls_connection {
 	/** Server state */
 	struct tls_server server;
 };
+
+/** Advertised maximum fragment length */
+#define TLS_MAX_FRAGMENT_LENGTH_VALUE TLS_MAX_FRAGMENT_LENGTH_4096
+
+/** TX maximum fragment length
+ *
+ * TLS requires us to limit our transmitted records to the maximum
+ * fragment length that we attempt to negotiate, even if the server
+ * does not respect this choice.
+ */
+#define TLS_TX_BUFSIZE 4096
 
 /** RX I/O buffer size
  *

@@ -31,6 +31,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <ipxe/sbi.h>
 #include <ipxe/io.h>
+#include <ipxe/keys.h>
 #include <ipxe/console.h>
 #include <config/console.h>
 
@@ -39,6 +40,8 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #undef CONSOLE_SBI
 #define CONSOLE_SBI ( CONSOLE_USAGE_ALL & ~CONSOLE_USAGE_LOG )
 #endif
+
+extern void early_uart_putchar ( int character );
 
 /** Buffered input character (if any) */
 static unsigned char sbi_console_input;
@@ -49,9 +52,18 @@ static unsigned char sbi_console_input;
  * @v character		Character to be printed
  */
 static void sbi_putchar ( int character ) {
+	struct sbi_return ret;
+
+	/* Write byte to early UART, if enabled */
+	early_uart_putchar ( character );
 
 	/* Write byte to console */
-	sbi_ecall_1 ( SBI_DBCN, SBI_DBCN_WRITE_BYTE, character );
+	ret = sbi_ecall_1 ( SBI_DBCN, SBI_DBCN_WRITE_BYTE, character );
+	if ( ! ret.error )
+		return;
+
+	/* Debug extension not supported: try legacy method */
+	sbi_legacy_ecall_1 ( SBI_LEGACY_PUTCHAR, character );
 }
 
 /**
@@ -65,6 +77,11 @@ static int sbi_getchar ( void ) {
 	/* Consume and return buffered character, if any */
 	character = sbi_console_input;
 	sbi_console_input = 0;
+
+	/* Convert DEL to backspace */
+	if ( character == DEL )
+		character = BACKSPACE;
+
 	return character;
 }
 
@@ -76,6 +93,7 @@ static int sbi_getchar ( void ) {
  */
 static int sbi_iskey ( void ) {
 	struct sbi_return ret;
+	long key;
 
 	/* Do nothing if we already have a buffered character */
 	if ( sbi_console_input )
@@ -85,11 +103,18 @@ static int sbi_iskey ( void ) {
 	ret = sbi_ecall_3 ( SBI_DBCN, SBI_DBCN_READ,
 			    sizeof ( sbi_console_input ),
 			    virt_to_phys ( &sbi_console_input ), 0 );
-	if ( ret.error )
-		return 0;
+	if ( ! ret.error )
+		return ret.value;
 
-	/* Return number of characters read and buffered */
-	return ret.value;
+	/* Debug extension not supported: try legacy method */
+	key = sbi_legacy_ecall_0 ( SBI_LEGACY_GETCHAR );
+	if ( key > 0 ) {
+		sbi_console_input = key;
+		return key;
+	}
+
+	/* No character available */
+	return 0;
 }
 
 /** SBI console */
